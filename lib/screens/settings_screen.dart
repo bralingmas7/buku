@@ -18,6 +18,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _googleEmail;
 
+  @override
+  void initState() {
+    super.initState();
+
+    // Pulihkan tampilan akun saat halaman Pengaturan dibuka kembali.
+    _googleEmail = GoogleDriveService.instance.account?.email;
+    _restoreGoogleStatus();
+  }
+
+  Future<void> _restoreGoogleStatus() async {
+    try {
+      final account =
+          await GoogleDriveService.instance.restoreAccount();
+
+      if (!mounted || account == null) return;
+
+      setState(() => _googleEmail = account.email);
+    } catch (e) {
+      debugPrint('Pemulihan status Google gagal: $e');
+    }
+  }
+
   Future<void> _connectGoogle() async {
     if (_busy) return;
     setState(() => _busy = true);

@@ -26,6 +26,21 @@ class GoogleDriveService {
     );
   }
 
+  Future<GoogleSignInAccount?> restoreAccount() async {
+    await initialize();
+
+    // Jika layanan masih hidup, gunakan akun yang sudah terautentikasi.
+    if (_account != null) return _account;
+
+    // Setelah aplikasi dimulai ulang, coba pulihkan sesi sebelumnya.
+    final attempt = _google.attemptLightweightAuthentication();
+
+    if (attempt == null) return null;
+
+    _account = await attempt;
+    return _account;
+  }
+
   Future<String> connectAndTest() async {
     await initialize();
 

@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../db.dart';
+import '../services/google_drive_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -15,6 +16,60 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
+  String? _googleEmail;
+
+  Future<void> _connectGoogle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    try {
+      final email =
+          await GoogleDriveService.instance.connectAndTest();
+
+      if (!mounted) return;
+      setState(() => _googleEmail = email);
+      _message('Google Drive berhasil terhubung: $email');
+    } catch (e) {
+      _message('Koneksi Google gagal: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _switchGoogle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    try {
+      final email =
+          await GoogleDriveService.instance.switchAccount();
+
+      if (!mounted) return;
+      setState(() => _googleEmail = email);
+      _message('Akun Google berhasil diganti: $email');
+    } catch (e) {
+      _message('Ganti akun gagal: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _logoutGoogle() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+
+    try {
+      await GoogleDriveService.instance.signOut();
+
+      if (!mounted) return;
+      setState(() => _googleEmail = null);
+      _message('Logout Google berhasil. Data lokal tetap aman.');
+    } catch (e) {
+      _message('Logout Google gagal: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   void _message(String message) {
     if (!mounted) return;
@@ -172,13 +227,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          const Card(
-            child: ListTile(
-              leading: Icon(Icons.cloud_outlined),
-              title: Text('Google Drive'),
-              subtitle: Text(
-                'Login Google dan backup otomatis akan ditambahkan '
-                'setelah fitur backup lokal selesai diuji.',
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.cloud_outlined),
+                    title: Text('Google Drive'),
+                    subtitle: Text(
+                      'Hubungkan akun Google untuk menyiapkan backup cloud.',
+                    ),
+                  ),
+                  if (_googleEmail != null) ...[
+                    const SizedBox(height: 8),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.account_circle_outlined),
+                      title: const Text('Akun terhubung'),
+                      subtitle: Text(_googleEmail!),
+                    ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _switchGoogle,
+                        icon: const Icon(Icons.switch_account),
+                        label: const Text('Ganti akun Google'),
+                      ),
+                    ),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: _busy ? null : _logoutGoogle,
+                        icon: const Icon(Icons.logout),
+                        label: const Text('Logout Google'),
+                      ),
+                    ),
+                  ] else
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _busy ? null : _connectGoogle,
+                        icon: const Icon(Icons.login),
+                        label: const Text('Hubungkan Google Drive'),
+                      ),
+                    ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Tahap ini hanya menguji login dan akses Drive. '
+                    'Belum ada file yang diunggah atau dihapus.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ],
               ),
             ),
           ),

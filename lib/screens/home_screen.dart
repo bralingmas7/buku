@@ -6,6 +6,7 @@ import '../models.dart';
 import '../status_style.dart';
 import '../utils.dart';
 import 'customer_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -112,6 +113,19 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Buku Utang Warung'),
         actions: [
+          IconButton(
+            tooltip: 'Pengaturan',
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              );
+              await _load();
+            },
+          ),
           IconButton(
             tooltip: 'Pelanggan baru',
             icon: const Icon(Icons.person_add_alt_1),

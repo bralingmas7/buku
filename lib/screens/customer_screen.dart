@@ -51,17 +51,72 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Future<void> _addTxn(TxnType type) async {
     final c = _customer!;
+    final oldBalance = computeBalance(_txns);
+
     final txn = await showTxnForm(
       context,
       customer: c,
       type: type,
-      balance: computeBalance(_txns),
+      balance: oldBalance,
     );
     if (txn == null) return;
+
     await AppDb.instance.insertTxn(txn);
     await _load();
-    if (mounted) {
-      _snack(type == TxnType.utang ? 'Utang dicatat' : 'Pembayaran dicatat');
+
+    if (!mounted) return;
+
+    final newBalance = computeBalance(_txns);
+    _snack(type == TxnType.utang ? 'Utang dicatat' : 'Pembayaran dicatat');
+
+    if (type == TxnType.bayar && oldBalance > 0 && newBalance <= 0) {
+      await _sendSettlementReceipt();
+    }
+  }
+
+  Future<void> _sendSettlementReceipt() async {
+    final c = _customer!;
+    final cycle = latestClosedDebtCycle(_txns);
+    if (cycle.isEmpty) return;
+
+    final send = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Utang sudah lunas'),
+        content: const Text(
+          'Saldo pelanggan sudah lunas. Kirim bukti pelunasan '
+          'beserta seluruh transaksi dalam siklus ini melalui WhatsApp?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Nanti'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Kirim WhatsApp'),
+          ),
+        ],
+      ),
+    );
+
+    if (send != true || !mounted) return;
+
+    final msg = buildSettlementReceipt(name: c.name, txns: cycle);
+    var opened = false;
+
+    try {
+      opened = await launchUrl(
+        waUri(c.phone, msg),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      opened = false;
+    }
+
+    if (!opened && mounted) {
+      await Clipboard.setData(ClipboardData(text: msg));
+      _snack('WhatsApp tidak bisa dibuka. Bukti pelunasan disalin.');
     }
   }
 
@@ -70,7 +125,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
       context,
       title: 'Hapus catatan?',
       message: '${t.type == TxnType.utang ? 'Utang' : 'Pembayaran'} '
-          '${rupiah(t.amount)} tanggal ${tgl(t.date)} akan dihapus.',
+          '${rupiah(t.amount)} tanggal ${tglJam(t.date)} akan dihapus.',
     );
     if (!ok) return;
     await AppDb.instance.deleteTxn(t.id!);
@@ -82,8 +137,8 @@ class _CustomerScreenState extends State<CustomerScreen> {
     final msg = buildReminder(
       name: c.name,
       balance: computeBalance(_txns),
-      due: nextDueDate(_txns),
-      txns: _txns,
+      due: nextDueDate(activeDebtCycle(_txns)),
+      txns: activeDebtCycle(_txns),
     );
     bool ok;
     try {
@@ -304,7 +359,7 @@ class _TxnTile extends StatelessWidget {
     final isDebt = txn.type == TxnType.utang;
     final color = isDebt ? kMerah : kHijau;
     final subtitle = [
-      tgl(txn.date),
+      tglJam(txn.date),
       if (isDebt && txn.dueDate != null) 'tempo ${tgl(txn.dueDate!)}',
     ].join(' • ');
 

@@ -17,6 +17,15 @@ String rupiah(int value) {
 }
 
 /// DateTime(2026, 11, 5) -> "5 Nov 2026"
+String tglJam(DateTime d) {
+  if (d.hour == 0 && d.minute == 0 && d.second == 0 && d.millisecond == 0) {
+    return tgl(d);
+  }
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${two(d.day)}-${two(d.month)}-${d.year} '
+      '${two(d.hour)}:${two(d.minute)}:${two(d.second)}';
+}
+
 String tgl(DateTime d) => '${d.day} ${_bulan[d.month - 1]} ${d.year}';
 
 String statusText(CustomerSummary s, [DateTime? now]) {
@@ -57,7 +66,7 @@ String _line(Txn t) {
   final sign = t.type == TxnType.utang ? '+' : '-';
   final label = t.type == TxnType.utang ? 'utang' : 'bayar';
   final note = t.note.trim().isEmpty ? '' : ' (${t.note.trim()})';
-  return '${tgl(t.date)}: $label $sign${rupiah(t.amount)}$note';
+  return '${tglJam(t.date)}: $label $sign${rupiah(t.amount)}$note';
 }
 
 List<Txn> _newestFirst(List<Txn> txns) =>
@@ -75,7 +84,7 @@ String buildReminder({
     ..writeln(
         'Ini pengingat ramah dari warung: sisa utang Anda saat ini ${rupiah(balance)}.');
   if (due != null) b.writeln('Jatuh tempo: ${tgl(due)}.');
-  final recent = _newestFirst(txns).take(5).toList();
+  final recent = _newestFirst(txns);
   if (recent.isNotEmpty) {
     b.writeln('\nRincian terakhir:');
     for (final t in recent) {
@@ -83,6 +92,42 @@ String buildReminder({
     }
   }
   b.write('\nKalau sudah ada rezekinya, ditunggu ya. Terima kasih banyak!');
+  return b.toString();
+}
+
+/// Pesan bukti pelunasan untuk satu siklus utang yang telah ditutup.
+String buildSettlementReceipt({
+  required String name,
+  required List<Txn> txns,
+}) {
+  final sorted = [...txns]..sort((a, b) {
+    final byDate = a.date.compareTo(b.date);
+    return byDate != 0 ? byDate : (a.id ?? 0).compareTo(b.id ?? 0);
+  });
+
+  final totalDebt = sorted
+      .where((t) => t.type == TxnType.utang)
+      .fold<int>(0, (sum, t) => sum + t.amount);
+  final totalPaid = sorted
+      .where((t) => t.type == TxnType.bayar)
+      .fold<int>(0, (sum, t) => sum + t.amount);
+
+  final b = StringBuffer()
+    ..writeln('BUKTI PELUNASAN')
+    ..writeln('Nama: $name')
+    ..writeln('Waktu: ${tglJam(DateTime.now())}')
+    ..writeln('Status: LUNAS')
+    ..writeln('Total utang: ${rupiah(totalDebt)}')
+    ..writeln('Total pembayaran: ${rupiah(totalPaid)}')
+    ..writeln('')
+    ..writeln('Rincian transaksi:');
+
+  for (final t in sorted) {
+    b.writeln('- ${_line(t)}');
+  }
+
+  b.writeln('');
+  b.write('Terima kasih sudah menyelesaikan pembayaran 🙏');
   return b.toString();
 }
 

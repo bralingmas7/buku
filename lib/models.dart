@@ -179,3 +179,52 @@ List<CustomerSummary> buildSummaries(
     );
   }).toList();
 }
+
+
+/// Mengurutkan transaksi berdasarkan waktu, lalu ID untuk waktu yang sama.
+List<Txn> _orderedTxns(List<Txn> txns) {
+  return [...txns]..sort((a, b) {
+    final byDate = a.date.compareTo(b.date);
+    return byDate != 0 ? byDate : (a.id ?? 0).compareTo(b.id ?? 0);
+  });
+}
+
+/// Transaksi pada siklus utang yang masih aktif.
+List<Txn> activeDebtCycle(List<Txn> txns) {
+  final cycle = <Txn>[];
+  var balance = 0;
+
+  for (final t in _orderedTxns(txns)) {
+    cycle.add(t);
+    balance += t.type == TxnType.utang ? t.amount : -t.amount;
+
+    if (balance <= 0) {
+      cycle.clear();
+      balance = 0;
+    }
+  }
+
+  return cycle;
+}
+
+/// Transaksi pada siklus terakhir yang sudah lunas.
+List<Txn> latestClosedDebtCycle(List<Txn> txns) {
+  final cycle = <Txn>[];
+  List<Txn> latestClosed = [];
+  var balance = 0;
+
+  for (final t in _orderedTxns(txns)) {
+    cycle.add(t);
+    balance += t.type == TxnType.utang ? t.amount : -t.amount;
+
+    if (balance <= 0) {
+      if (cycle.any((item) => item.type == TxnType.utang)) {
+        latestClosed = List<Txn>.from(cycle);
+      }
+      cycle.clear();
+      balance = 0;
+    }
+  }
+
+  return latestClosed;
+}

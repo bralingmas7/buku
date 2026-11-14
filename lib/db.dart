@@ -5,6 +5,8 @@ import 'models.dart';
 
 class AppDb {
   AppDb._();
+  AppDb.forTesting(Database database) : _db = database;
+
   static final AppDb instance = AppDb._();
 
   static const backupFormat = 'buku_utang_warung_backup';
@@ -22,33 +24,36 @@ class AppDb {
       onConfigure: (db) async {
         await db.execute('PRAGMA foreign_keys = ON');
       },
-      onCreate: (db, version) async {
-        await db.execute('''
-          CREATE TABLE customers(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            phone TEXT NOT NULL DEFAULT '',
-            note TEXT NOT NULL DEFAULT '',
-            credit_limit INTEGER NOT NULL DEFAULT 0,
-            created_at INTEGER NOT NULL
-          )
-        ''');
-        await db.execute('''
-          CREATE TABLE transactions(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            customer_id INTEGER NOT NULL,
-            type TEXT NOT NULL,
-            amount INTEGER NOT NULL,
-            note TEXT NOT NULL DEFAULT '',
-            date INTEGER NOT NULL,
-            due_date INTEGER,
-            FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
-          )
-        ''');
-        await db.execute(
-          'CREATE INDEX idx_txn_customer ON transactions(customer_id)',
-        );
-      },
+      onCreate: (db, version) => createSchema(db),
+    );
+  }
+
+  // Satu skema dipakai aplikasi dan test agar tidak berbeda.
+  static Future<void> createSchema(DatabaseExecutor db) async {
+    await db.execute('''
+      CREATE TABLE customers(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL DEFAULT '',
+        note TEXT NOT NULL DEFAULT '',
+        credit_limit INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      )
+    ''');
+    await db.execute('''
+      CREATE TABLE transactions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        customer_id INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        amount INTEGER NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        date INTEGER NOT NULL,
+        due_date INTEGER,
+        FOREIGN KEY(customer_id) REFERENCES customers(id) ON DELETE CASCADE
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX idx_txn_customer ON transactions(customer_id)',
     );
   }
 

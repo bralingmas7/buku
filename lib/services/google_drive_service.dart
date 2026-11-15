@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:extension_google_sign_in_as_googleapis_auth/extension_google_sign_in_as_googleapis_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class GoogleDriveService {
   GoogleDriveService._();
@@ -25,6 +26,8 @@ class GoogleDriveService {
   static const int _maximumBackupBytes = 100 * 1024 * 1024;
 
   final GoogleSignIn _google = GoogleSignIn.instance;
+  final SharedPreferencesAsync _preferences = SharedPreferencesAsync();
+  static const String _savedAccountEmailKey = 'google_drive_saved_email';
   Future<void>? _initialization;
   GoogleSignInAccount? _account;
   StreamSubscription<GoogleSignInAuthenticationEvent>? _authSubscription;
@@ -68,50 +71,31 @@ class GoogleDriveService {
 
   String get restoreDiagnostic => _restoreDiagnostic;
 
+  Future<String?> loadSavedAccountEmail() =>
+      _preferences.getString(_savedAccountEmailKey);
+
   Future<GoogleSignInAccount?> restoreAccount() async {
     _restoreDiagnostic = 'INITIALIZING';
     await initialize();
 
     if (_account != null) {
-      _restoreDiagnostic = 'ACCOUNT_ALREADY_AVAILABLE';
+      _restoreDiagnostic = 'SESSION_ACTIVE';
       return _account;
     }
 
-    _restoreDiagnostic = 'ATTEMPTING_LIGHTWEIGHT_AUTH';
-
-    try {
-      final attempt = _google.attemptLightweightAuthentication(
-        reportAllExceptions: true,
-      );
-
-      if (attempt == null) {
-        _restoreDiagnostic = 'NO_FUTURE_RETURNED';
-        return null;
-      }
-
-      final restored = await attempt;
-
-      if (restored == null) {
-        _restoreDiagnostic = 'FUTURE_RETURNED_NULL';
-        return _account;
-      }
-
-      _setAccount(restored);
-      _restoreDiagnostic = 'LIGHTWEIGHT_RESTORED';
-      return _account;
-    } catch (e) {
-      _restoreDiagnostic = 'ERROR ${e.runtimeType}: $e';
-      rethrow;
-    }
+    _restoreDiagnostic = 'NO_ACTIVE_SESSION';
+    return null;
   }
 
   Future<T> _withDriveApi<T>(
     Future<T> Function(drive.DriveApi api) action,
   ) async {
-    final currentAccount = await restoreAccount();
+    final currentAccount = _account;
 
     if (currentAccount == null) {
-      throw StateError('Hubungkan akun Google Drive terlebih dahulu.');
+      throw StateError(
+        'Sesi Google belum aktif. Hubungkan ulang Google Drive terlebih dahulu.',
+      );
     }
 
     final authorizationClient = currentAccount.authorizationClient;
@@ -261,7 +245,6 @@ class GoogleDriveService {
     }
 
     final account = await _google.authenticate();
-    _setAccount(account);
 
     final authorizationClient = account.authorizationClient;
     final authorization =
@@ -281,13 +264,19 @@ class GoogleDriveService {
       client.close();
     }
 
+    _setAccount(account);
+    await _preferences.setString(_savedAccountEmailKey, account.email);
+    _restoreDiagnostic = 'SESSION_ACTIVE';
+
     return account.email;
   }
 
   Future<void> signOut() async {
     await initialize();
     await _google.signOut();
+    await _preferences.remove(_savedAccountEmailKey);
     _setAccount(null);
+    _restoreDiagnostic = 'SIGNED_OUT';
   }
 
   Future<String> switchAccount() async {

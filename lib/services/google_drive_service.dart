@@ -86,7 +86,9 @@ class GoogleDriveService {
     // google_sign_in v7: initialize() tidak memulihkan login lama.
     // Harus dipanggil attemptLightweightAuthentication() secara eksplisit.
     try {
-      final attempt = _google.attemptLightweightAuthentication();
+      final attempt = _google.attemptLightweightAuthentication(
+        reportAllExceptions: true,
+      );
       final restored = attempt == null ? null : await attempt;
 
       if (restored != null) {

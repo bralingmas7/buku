@@ -66,11 +66,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       setState(() {
         _googleEmail = account?.email ?? savedEmail;
-        _googleRestoreStatus = account != null
+        final base = account != null
             ? 'SESI_AKTIF'
             : savedEmail != null
                 ? 'IDENTITAS_TERSIMPAN_SESI_BELUM_AKTIF'
                 : 'BELUM_TERHUBUNG';
+        _googleRestoreStatus = '$base | ${google.restoreDiagnostic}';
       });
     } catch (e) {
       if (!mounted) return;

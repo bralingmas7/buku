@@ -555,9 +555,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                     child: Align(
                       alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Diagnostik sesi: $_googleRestoreStatus',
-                        style: const TextStyle(fontSize: 11),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            GoogleDriveService.instance.account != null
+                                ? 'Sesi Google aktif.'
+                                : _googleEmail != null
+                                    ? 'Akun tersimpan. Ketuk "Verifikasi akun Google" '
+                                        'sebelum backup atau pulihkan.'
+                                    : 'Belum terhubung ke Google Drive.',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Detail teknis: $_googleRestoreStatus',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -576,7 +591,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         child: FilledButton.icon(
                           onPressed: _busy ? null : _connectGoogle,
                           icon: const Icon(Icons.login),
-                          label: const Text('Hubungkan ulang sesi Google'),
+                          label: const Text('Verifikasi akun Google'),
                         ),
                       ),
                     ],

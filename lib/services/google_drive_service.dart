@@ -83,25 +83,6 @@ class GoogleDriveService {
       return _account;
     }
 
-    // google_sign_in v7: initialize() tidak memulihkan login lama.
-    // Harus dipanggil attemptLightweightAuthentication() secara eksplisit.
-    try {
-      final attempt = _google.attemptLightweightAuthentication(
-        reportAllExceptions: true,
-      );
-      final restored = attempt == null ? null : await attempt;
-
-      if (restored != null) {
-        _setAccount(restored);
-        await _preferences.setString(_savedAccountEmailKey, restored.email);
-        _restoreDiagnostic = 'SESSION_RESTORED';
-        return restored;
-      }
-    } catch (e) {
-      _restoreDiagnostic = 'RESTORE_ERROR: $e';
-      return null;
-    }
-
     _restoreDiagnostic = 'NO_ACTIVE_SESSION';
     return null;
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -18,14 +19,32 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _googleEmail;
+  StreamSubscription<GoogleSignInAccount?>? _googleAccountSubscription;
 
   @override
   void initState() {
     super.initState();
 
-    // Pulihkan tampilan akun saat halaman Pengaturan dibuka kembali.
-    _googleEmail = GoogleDriveService.instance.account?.email;
+    final google = GoogleDriveService.instance;
+    _googleEmail = google.account?.email;
+
+    _googleAccountSubscription = google.accountChanges.listen(
+      (account) {
+        if (!mounted) return;
+        setState(() => _googleEmail = account?.email);
+      },
+      onError: (Object error, StackTrace stack) {
+        debugPrint('Perubahan sesi Google gagal: $error');
+      },
+    );
+
     _restoreGoogleStatus();
+  }
+
+  @override
+  void dispose() {
+    _googleAccountSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _restoreGoogleStatus() async {

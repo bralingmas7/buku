@@ -27,12 +27,38 @@ class GoogleDriveService {
   final GoogleSignIn _google = GoogleSignIn.instance;
   Future<void>? _initialization;
   GoogleSignInAccount? _account;
+  StreamSubscription<GoogleSignInAuthenticationEvent>? _authSubscription;
+
+  final StreamController<GoogleSignInAccount?> _accountChanges =
+      StreamController<GoogleSignInAccount?>.broadcast();
 
   GoogleSignInAccount? get account => _account;
+  Stream<GoogleSignInAccount?> get accountChanges =>
+      _accountChanges.stream;
+
+  void _setAccount(GoogleSignInAccount? account) {
+    _account = account;
+    _accountChanges.add(account);
+  }
 
   Future<void> initialize() {
-    return _initialization ??= _google.initialize(
-      serverClientId: _serverClientId,
+    return _initialization ??= _initialize();
+  }
+
+  Future<void> _initialize() async {
+    await _google.initialize(serverClientId: _serverClientId);
+
+    _authSubscription ??= _google.authenticationEvents.listen(
+      (event) {
+        if (event is GoogleSignInAuthenticationEventSignIn) {
+          _setAccount(event.user);
+        } else if (event is GoogleSignInAuthenticationEventSignOut) {
+          _setAccount(null);
+        }
+      },
+      onError: (Object error, StackTrace stack) {
+        _accountChanges.addError(error, stack);
+      },
     );
   }
 
@@ -45,7 +71,10 @@ class GoogleDriveService {
 
     if (attempt == null) return null;
 
-    _account = await attempt;
+    final restored = await attempt;
+    if (restored != null) {
+      _setAccount(restored);
+    }
     return _account;
   }
 
@@ -58,8 +87,10 @@ class GoogleDriveService {
       throw StateError('Hubungkan akun Google Drive terlebih dahulu.');
     }
 
-    final authorization = await currentAccount.authorizationClient
-        .authorizeScopes(_scopes);
+    final authorizationClient = currentAccount.authorizationClient;
+    final authorization =
+        await authorizationClient.authorizationForScopes(_scopes) ??
+        await authorizationClient.authorizeScopes(_scopes);
 
     final client = authorization.authClient(scopes: _scopes);
 
@@ -203,10 +234,12 @@ class GoogleDriveService {
     }
 
     final account = await _google.authenticate();
-    _account = account;
+    _setAccount(account);
 
+    final authorizationClient = account.authorizationClient;
     final authorization =
-        await account.authorizationClient.authorizeScopes(_scopes);
+        await authorizationClient.authorizationForScopes(_scopes) ??
+        await authorizationClient.authorizeScopes(_scopes);
 
     final client = authorization.authClient(scopes: _scopes);
 
@@ -227,7 +260,7 @@ class GoogleDriveService {
   Future<void> signOut() async {
     await initialize();
     await _google.signOut();
-    _account = null;
+    _setAccount(null);
   }
 
   Future<String> switchAccount() async {

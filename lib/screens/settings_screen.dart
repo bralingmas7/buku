@@ -338,12 +338,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _cloudBackup() async {
     if (_busy || _googleEmail == null) return;
 
-    final password = await _askCloudPassword(confirm: true);
-    if (password == null || !mounted) return;
-
     setState(() => _busy = true);
 
     try {
+      if (GoogleDriveService.instance.account == null) {
+        final email = await GoogleDriveService.instance.connectAndTest();
+        if (!mounted) return;
+        setState(() => _googleEmail = email);
+      }
+
+      final password = await _askCloudPassword(confirm: true);
+      if (password == null || !mounted) return;
+
       final data = await AppDb.instance.exportBackup();
       final encrypted =
           await BackupCryptoService.instance.encryptBackup(data, password);
@@ -365,6 +371,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
 
     try {
+      if (GoogleDriveService.instance.account == null) {
+        final email = await GoogleDriveService.instance.connectAndTest();
+        if (!mounted) return;
+        setState(() => _googleEmail = email);
+      }
+
       final files =
           await GoogleDriveService.instance.listEncryptedBackups();
 
@@ -597,9 +609,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: _busy || GoogleDriveService.instance.account == null
-                            ? null
-                            : _cloudBackup,
+                        onPressed: _busy ? null : _cloudBackup,
                         icon: const Icon(Icons.cloud_upload_outlined),
                         label: const Text('Backup ke Google Drive'),
                       ),
@@ -608,9 +618,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     SizedBox(
                       width: double.infinity,
                       child: OutlinedButton.icon(
-                        onPressed: _busy || GoogleDriveService.instance.account == null
-                            ? null
-                            : _cloudRestore,
+                        onPressed: _busy ? null : _cloudRestore,
                         icon: const Icon(Icons.cloud_download_outlined),
                         label: const Text('Pulihkan dari Google Drive'),
                       ),

@@ -20,6 +20,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
   String? _googleEmail;
+  String _googleRestoreStatus = 'Belum diperiksa';
   StreamSubscription<GoogleSignInAccount?>? _googleAccountSubscription;
 
   @override
@@ -32,7 +33,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _googleAccountSubscription = google.accountChanges.listen(
       (account) {
         if (!mounted) return;
-        setState(() => _googleEmail = account?.email);
+        setState(() {
+          _googleEmail = account?.email;
+          _googleRestoreStatus =
+              GoogleDriveService.instance.restoreDiagnostic;
+        });
       },
       onError: (Object error, StackTrace stack) {
         debugPrint('Perubahan sesi Google gagal: $error');
@@ -53,10 +58,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final account =
           await GoogleDriveService.instance.restoreAccount();
 
-      if (!mounted || account == null) return;
+      if (!mounted) return;
 
-      setState(() => _googleEmail = account.email);
+      setState(() {
+        _googleEmail = account?.email;
+        _googleRestoreStatus =
+            GoogleDriveService.instance.restoreDiagnostic;
+      });
     } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _googleRestoreStatus =
+            GoogleDriveService.instance.restoreDiagnostic;
+      });
       debugPrint('Pemulihan status Google gagal: $e');
     }
   }
@@ -515,6 +529,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     title: Text('Google Drive'),
                     subtitle: Text(
                       'Hubungkan akun Google untuk menyiapkan backup cloud.',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Diagnostik sesi: $_googleRestoreStatus',
+                        style: const TextStyle(fontSize: 11),
+                      ),
                     ),
                   ),
                   if (_googleEmail != null) ...[

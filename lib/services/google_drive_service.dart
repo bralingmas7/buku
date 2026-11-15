@@ -51,8 +51,10 @@ class GoogleDriveService {
     _authSubscription ??= _google.authenticationEvents.listen(
       (event) {
         if (event is GoogleSignInAuthenticationEventSignIn) {
+          _restoreDiagnostic = 'AUTH_EVENT_SIGN_IN';
           _setAccount(event.user);
         } else if (event is GoogleSignInAuthenticationEventSignOut) {
+          _restoreDiagnostic = 'AUTH_EVENT_SIGN_OUT';
           _setAccount(null);
         }
       },
@@ -62,20 +64,45 @@ class GoogleDriveService {
     );
   }
 
+  String _restoreDiagnostic = 'BELUM_DIPERIKSA';
+
+  String get restoreDiagnostic => _restoreDiagnostic;
+
   Future<GoogleSignInAccount?> restoreAccount() async {
+    _restoreDiagnostic = 'INITIALIZING';
     await initialize();
 
-    if (_account != null) return _account;
-
-    final attempt = _google.attemptLightweightAuthentication();
-
-    if (attempt == null) return null;
-
-    final restored = await attempt;
-    if (restored != null) {
-      _setAccount(restored);
+    if (_account != null) {
+      _restoreDiagnostic = 'ACCOUNT_ALREADY_AVAILABLE';
+      return _account;
     }
-    return _account;
+
+    _restoreDiagnostic = 'ATTEMPTING_LIGHTWEIGHT_AUTH';
+
+    try {
+      final attempt = _google.attemptLightweightAuthentication(
+        reportAllExceptions: true,
+      );
+
+      if (attempt == null) {
+        _restoreDiagnostic = 'NO_FUTURE_RETURNED';
+        return null;
+      }
+
+      final restored = await attempt;
+
+      if (restored == null) {
+        _restoreDiagnostic = 'FUTURE_RETURNED_NULL';
+        return _account;
+      }
+
+      _setAccount(restored);
+      _restoreDiagnostic = 'LIGHTWEIGHT_RESTORED';
+      return _account;
+    } catch (e) {
+      _restoreDiagnostic = 'ERROR ${e.runtimeType}: $e';
+      rethrow;
+    }
   }
 
   Future<T> _withDriveApi<T>(

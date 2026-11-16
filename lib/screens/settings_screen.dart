@@ -8,6 +8,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../db.dart';
 import '../services/backup_crypto_service.dart';
+import '../services/backup_status.dart';
 import '../services/google_drive_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -351,6 +352,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final password = await _askCloudPassword(confirm: true);
       if (password == null || !mounted) return;
 
+      final revision = BackupStatus.instance.revision;
       final data = await AppDb.instance.exportBackup();
       final encrypted =
           await BackupCryptoService.instance.encryptBackup(data, password);
@@ -358,6 +360,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final uploaded =
           await GoogleDriveService.instance.uploadEncryptedBackup(encrypted);
 
+      await BackupStatus.instance.markBackedUp(revision);
       _message('Backup terenkripsi berhasil diunggah: ${uploaded.name}');
     } catch (e) {
       _message('Backup Google Drive gagal: $e');

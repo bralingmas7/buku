@@ -7,6 +7,8 @@ import '../status_style.dart';
 import '../utils.dart';
 import 'customer_screen.dart';
 import 'settings_screen.dart';
+import '../services/backup_status.dart';
+import '../widgets/backup_indicator.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,9 +28,18 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SettingsScreen()),
+    );
+    await _load();
+  }
+
   Future<void> _load() async {
     final db = AppDb.instance;
     final customers = await db.customers();
+    await BackupStatus.instance.load(hasData: customers.isNotEmpty);
     final txns = await db.allTxns();
     final list = buildSummaries(customers, txns)
       ..sort((a, b) {
@@ -113,6 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('Buku Utang Warung'),
         actions: [
+          BackupIndicator(onTap: _openSettings),
           IconButton(
             tooltip: 'Pengaturan',
             icon: const Icon(Icons.settings_outlined),

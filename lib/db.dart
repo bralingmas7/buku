@@ -2,6 +2,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
 import 'models.dart';
+import 'services/backup_status.dart';
 
 class AppDb {
   AppDb._();
@@ -71,18 +72,22 @@ class AppDb {
 
   Future<int> insertCustomer(Customer c) async {
     final db = await _database;
-    return db.insert('customers', c.toMap());
+    final id = await db.insert('customers', c.toMap());
+    BackupStatus.instance.markDirty();
+    return id;
   }
 
   Future<void> updateCustomer(Customer c) async {
     final db = await _database;
     await db.update('customers', c.toMap(), where: 'id = ?', whereArgs: [c.id]);
+    BackupStatus.instance.markDirty();
   }
 
   Future<void> deleteCustomer(int id) async {
     final db = await _database;
     await db.delete('transactions', where: 'customer_id = ?', whereArgs: [id]);
     await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    BackupStatus.instance.markDirty();
   }
 
   Future<List<Txn>> allTxns() async {
@@ -104,12 +109,15 @@ class AppDb {
 
   Future<int> insertTxn(Txn t) async {
     final db = await _database;
-    return db.insert('transactions', t.toMap());
+    final id = await db.insert('transactions', t.toMap());
+    BackupStatus.instance.markDirty();
+    return id;
   }
 
   Future<void> deleteTxn(int id) async {
     final db = await _database;
     await db.delete('transactions', where: 'id = ?', whereArgs: [id]);
+    BackupStatus.instance.markDirty();
   }
 
   // Membuat snapshot JSON tanpa mengubah database aktif.
@@ -219,5 +227,7 @@ class AppDb {
         await txn.insert('transactions', row);
       }
     });
+
+    BackupStatus.instance.markDirty();
   }
 }

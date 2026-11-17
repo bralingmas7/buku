@@ -114,15 +114,17 @@ class _ReceiptImageScreenState extends State<ReceiptImageScreen> {
 
     setState(() => _working = true);
     try {
-      await Share.shareXFiles(
-        [
-          XFile.fromData(
-            bytes,
-            mimeType: 'image/png',
-            name: _fileName,
-          ),
-        ],
-        fileNameOverrides: [_fileName],
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile.fromData(
+              bytes,
+              mimeType: 'image/png',
+              name: _fileName,
+            ),
+          ],
+          fileNameOverrides: [_fileName],
+        ),
       );
     } catch (e) {
       if (mounted) {

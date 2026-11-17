@@ -1,6 +1,6 @@
 enum TxnType { utang, bayar }
 
-enum DebtStatus { lunas, lancar, mendekati, telat }
+enum DebtStatus { piutang, lunas, lancar, mendekati, telat }
 
 DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -110,20 +110,42 @@ int computeBalance(List<Txn> txns) => txns.fold<int>(
 /// Jatuh tempo terdekat dari utang yang belum tertutup.
 /// Pembayaran dialokasikan ke utang paling lama lebih dulu (FIFO).
 DateTime? nextDueDate(List<Txn> txns) {
-  var credit = txns
-      .where((t) => t.type == TxnType.bayar)
-      .fold<int>(0, (sum, t) => sum + t.amount);
-  final debts = txns.where((t) => t.type == TxnType.utang).toList()
-    ..sort((a, b) => a.date.compareTo(b.date));
+  final ordered = [...txns]..sort((a, b) {
+    final byDate = a.date.compareTo(b.date);
+    return byDate != 0 ? byDate : (a.id ?? 0).compareTo(b.id ?? 0);
+  });
+
+  // Pembayaran dialokasikan secara kronologis ke utang tertua (FIFO).
+  // Kelebihan pembayaran menjadi kredit untuk utang berikutnya.
+  final outstanding = <MapEntry<Txn, int>>[];
+  var credit = 0;
+
+  for (final t in ordered) {
+    if (t.type == TxnType.utang) {
+      final remaining = t.amount - credit;
+      credit = remaining < 0 ? -remaining : 0;
+      if (remaining > 0) {
+        outstanding.add(MapEntry(t, remaining));
+      }
+    } else {
+      var payment = t.amount;
+      while (payment > 0 && outstanding.isNotEmpty) {
+        final first = outstanding.removeAt(0);
+        final left = first.value - payment;
+        if (left > 0) {
+          outstanding.insert(0, MapEntry(first.key, left));
+          payment = 0;
+        } else {
+          payment = -left;
+        }
+      }
+      credit += payment;
+    }
+  }
 
   DateTime? earliest;
-  for (final d in debts) {
-    if (credit >= d.amount) {
-      credit -= d.amount;
-      continue;
-    }
-    credit = 0;
-    final due = d.dueDate;
+  for (final item in outstanding) {
+    final due = item.key.dueDate;
     if (due != null && (earliest == null || due.isBefore(earliest))) {
       earliest = due;
     }
@@ -145,7 +167,8 @@ class CustomerSummary {
   });
 
   DebtStatus status([DateTime? now]) {
-    if (balance <= 0) return DebtStatus.lunas;
+    if (balance < 0) return DebtStatus.piutang;
+    if (balance == 0) return DebtStatus.lunas;
     final due = nextDue;
     if (due == null) return DebtStatus.lancar;
     final today = dateOnly(now ?? DateTime.now());
@@ -198,9 +221,8 @@ List<Txn> activeDebtCycle(List<Txn> txns) {
     cycle.add(t);
     balance += t.type == TxnType.utang ? t.amount : -t.amount;
 
-    if (balance <= 0) {
+    if (balance == 0) {
       cycle.clear();
-      balance = 0;
     }
   }
 
@@ -217,12 +239,11 @@ List<Txn> latestClosedDebtCycle(List<Txn> txns) {
     cycle.add(t);
     balance += t.type == TxnType.utang ? t.amount : -t.amount;
 
-    if (balance <= 0) {
+    if (balance == 0) {
       if (cycle.any((item) => item.type == TxnType.utang)) {
         latestClosed = List<Txn>.from(cycle);
       }
       cycle.clear();
-      balance = 0;
     }
   }
 

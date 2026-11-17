@@ -83,8 +83,32 @@ class GoogleDriveService {
       return _account;
     }
 
-    _restoreDiagnostic = 'NO_ACTIVE_SESSION';
-    return null;
+    _restoreDiagnostic = 'ATTEMPTING_LIGHTWEIGHT_AUTH';
+
+    try {
+      final attempt = _google.attemptLightweightAuthentication(
+        reportAllExceptions: true,
+      );
+
+      if (attempt == null) {
+        _restoreDiagnostic = 'LIGHTWEIGHT_NOT_AVAILABLE';
+        return null;
+      }
+
+      final restored = await attempt;
+
+      if (restored == null) {
+        _restoreDiagnostic = 'NO_ACTIVE_SESSION';
+        return _account;
+      }
+
+      _setAccount(restored);
+      _restoreDiagnostic = 'LIGHTWEIGHT_RESTORED';
+      return restored;
+    } catch (e) {
+      _restoreDiagnostic = 'LIGHTWEIGHT_ERROR: ${e.runtimeType}';
+      return null;
+    }
   }
 
   Future<T> _withDriveApi<T>(

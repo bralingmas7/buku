@@ -7,6 +7,8 @@ import '../dialogs.dart';
 import '../models.dart';
 import '../status_style.dart';
 import '../utils.dart';
+import '../services/shop_message_settings.dart';
+import 'receipt_image_screen.dart';
 
 class CustomerScreen extends StatefulWidget {
   final int customerId;
@@ -69,7 +71,7 @@ class _CustomerScreenState extends State<CustomerScreen> {
     final newBalance = computeBalance(_txns);
     _snack(type == TxnType.utang ? 'Utang dicatat' : 'Pembayaran dicatat');
 
-    if (type == TxnType.bayar && oldBalance > 0 && newBalance <= 0) {
+    if (type == TxnType.bayar && oldBalance > 0 && newBalance == 0) {
       await _sendSettlementReceipt();
     }
   }
@@ -102,7 +104,14 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
     if (send != true || !mounted) return;
 
-    final msg = buildSettlementReceipt(name: c.name, txns: cycle);
+    final messageSettings = await ShopMessageSettings.load();
+    final msg = buildSettlementReceipt(
+      name: c.name,
+      txns: cycle,
+      shopName: messageSettings.shopName,
+      header: messageSettings.header,
+      footer: messageSettings.footer,
+    );
     var opened = false;
 
     try {
@@ -134,11 +143,22 @@ class _CustomerScreenState extends State<CustomerScreen> {
 
   Future<void> _tagih() async {
     final c = _customer!;
+    final balance = computeBalance(_txns);
+    if (balance <= 0) {
+      _snack('Tidak ada utang yang perlu ditagih.');
+      return;
+    }
+
+    final messageSettings = await ShopMessageSettings.load();
+    final cycle = activeDebtCycle(_txns);
     final msg = buildReminder(
       name: c.name,
-      balance: computeBalance(_txns),
-      due: nextDueDate(activeDebtCycle(_txns)),
-      txns: activeDebtCycle(_txns),
+      balance: balance,
+      due: nextDueDate(cycle),
+      txns: cycle,
+      shopName: messageSettings.shopName,
+      header: messageSettings.header,
+      footer: messageSettings.footer,
     );
     bool ok;
     try {
@@ -163,6 +183,33 @@ class _CustomerScreenState extends State<CustomerScreen> {
       ),
     ));
     if (mounted) _snack('Rekap disalin');
+  }
+
+  Future<void> _openPng({required bool settlement}) async {
+    final c = _customer!;
+    final selectedTxns =
+        settlement ? latestClosedDebtCycle(_txns) : List<Txn>.from(_txns);
+
+    if (settlement && selectedTxns.isEmpty) {
+      _snack('Belum ada siklus utang yang lunas.');
+      return;
+    }
+
+    final settings = await ShopMessageSettings.load();
+    if (!mounted) return;
+
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReceiptImageScreen(
+          customer: c,
+          txns: selectedTxns,
+          balance: computeBalance(_txns),
+          shopSettings: settings,
+          settlement: settlement,
+        ),
+      ),
+    );
   }
 
   Future<void> _edit() async {
@@ -214,16 +261,34 @@ class _CustomerScreenState extends State<CustomerScreen> {
               switch (v) {
                 case 'edit':
                   _edit();
+                  break;
                 case 'recap':
                   _copyRecap();
+                  break;
+                case 'recap_png':
+                  _openPng(settlement: false);
+                  break;
+                case 'settlement_png':
+                  _openPng(settlement: true);
+                  break;
                 case 'delete':
                   _deleteCustomer();
+                  break;
               }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'edit', child: Text('Ubah data')),
-              PopupMenuItem(value: 'recap', child: Text('Salin rekap')),
-              PopupMenuItem(value: 'delete', child: Text('Hapus pelanggan')),
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'edit', child: Text('Ubah data')),
+              const PopupMenuItem(value: 'recap', child: Text('Salin rekap')),
+              const PopupMenuItem(
+                value: 'recap_png',
+                child: Text('Simpan rekap sebagai PNG'),
+              ),
+              if (latestClosedDebtCycle(_txns).isNotEmpty)
+                const PopupMenuItem(
+                  value: 'settlement_png',
+                  child: Text('Bukti pelunasan PNG'),
+                ),
+              const PopupMenuItem(value: 'delete', child: Text('Hapus pelanggan')),
             ],
           ),
         ],
@@ -269,10 +334,15 @@ class _Header extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Sisa utang', style: theme.textTheme.labelLarge),
+                  Text(
+                    status == DebtStatus.piutang
+                        ? 'Piutang pelanggan'
+                        : 'Sisa utang',
+                    style: theme.textTheme.labelLarge,
+                  ),
                   const SizedBox(height: 4),
                   Text(
-                    rupiah(summary.balance),
+                    rupiah(summary.balance.abs()),
                     style: theme.textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.bold,
                       color: status == DebtStatus.lunas ? null : color,

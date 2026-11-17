@@ -93,6 +93,64 @@ void main() {
     expect(msg, contains('20 Nov 2026'));
   });
 
+
+  test('pembayaran berlebih menghasilkan saldo piutang', () {
+    final txns = [
+      utang(100000, DateTime(2026, 1, 1)),
+      bayar(150000, DateTime(2026, 1, 2)),
+    ];
+
+    expect(computeBalance(txns), -50000);
+
+    final customer = Customer(
+      id: 1,
+      name: 'Bu Ani',
+      createdAt: DateTime(2026, 1, 1),
+    );
+
+    final summary = CustomerSummary(
+      customer: customer,
+      balance: computeBalance(txns),
+    );
+
+    expect(summary.status(), DebtStatus.piutang);
+  });
+
+  test('kredit lama mengurangi utang baru', () {
+    final txns = [
+      utang(100000, DateTime(2026, 1, 1)),
+      bayar(150000, DateTime(2026, 1, 2)),
+      utang(70000, DateTime(2026, 1, 3),
+          due: DateTime(2026, 1, 20)),
+    ];
+
+    expect(computeBalance(txns), 20000);
+    expect(nextDueDate(txns), DateTime(2026, 1, 20));
+  });
+
+  test('saldo negatif tidak dianggap siklus lunas', () {
+    final txns = [
+      utang(100000, DateTime(2026, 1, 1)),
+      bayar(150000, DateTime(2026, 1, 2)),
+    ];
+
+    expect(activeDebtCycle(txns), hasLength(2));
+    expect(latestClosedDebtCycle(txns), isEmpty);
+  });
+
+  test('siklus ditutup ketika saldo kembali tepat nol', () {
+    final txns = [
+      utang(100000, DateTime(2026, 1, 1)),
+      bayar(150000, DateTime(2026, 1, 2)),
+      utang(70000, DateTime(2026, 1, 3)),
+      bayar(20000, DateTime(2026, 1, 4)),
+    ];
+
+    expect(computeBalance(txns), 0);
+    expect(activeDebtCycle(txns), isEmpty);
+    expect(latestClosedDebtCycle(txns), hasLength(4));
+  });
+
   test('waUri menyandikan teks', () {
     final uri = waUri('08123456789', 'Halo dunia');
     expect(uri.host, 'wa.me');

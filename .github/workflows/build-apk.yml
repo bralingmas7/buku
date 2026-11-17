@@ -48,6 +48,30 @@ jobs:
           sed -i 's/android:label="[^"]*"/android:label="Buku Utang Warung"/' \
             android/app/src/main/AndroidManifest.xml
 
+          # Kunci Android Keystore tidak boleh dipindahkan oleh Android Auto Backup.
+          python3 - <<'PYSECURE'
+          from pathlib import Path
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text()
+          start = text.find("<application")
+          if start < 0:
+              raise SystemExit("Tag application tidak ditemukan.")
+
+          end = text.find(">", start)
+          if end < 0:
+              raise SystemExit("Tag application tidak lengkap.")
+
+          tag = text[start:end + 1]
+          if "android:allowBackup=" in tag:
+              raise SystemExit("allowBackup sudah diatur; periksa manual.")
+
+          text = text[:end] + ' android:allowBackup="false"' + text[end:]
+          manifest.write_text(text)
+          print("Android Auto Backup dinonaktifkan.")
+          PYSECURE
+
+
       # Siapkan keystore dari GitHub Secrets
       - name: Siapkan keystore
         env:

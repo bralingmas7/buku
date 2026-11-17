@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../db.dart';
 import '../dialogs.dart';
 import '../models.dart';
 import '../status_style.dart';
 import '../utils.dart';
+import '../services/shop_message_settings.dart';
 import 'customer_screen.dart';
 import 'settings_screen.dart';
 import '../services/backup_status.dart';
@@ -34,6 +37,55 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(builder: (_) => const SettingsScreen()),
     );
     await _load();
+  }
+
+  Future<void> _tagihCepat(CustomerSummary s) async {
+    final c = s.customer;
+    final txns = await AppDb.instance.txnsFor(c.id!);
+    if (!mounted) return;
+
+    final balance = computeBalance(txns);
+    if (balance <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tidak ada utang yang perlu ditagih.'),
+        ),
+      );
+      return;
+    }
+
+    final cycle = activeDebtCycle(txns);
+    final messageSettings = await ShopMessageSettings.load();
+    final msg = buildReminder(
+      name: c.name,
+      balance: balance,
+      due: nextDueDate(cycle),
+      txns: cycle,
+      shopName: messageSettings.shopName,
+      header: messageSettings.header,
+      footer: messageSettings.footer,
+    );
+
+    bool ok;
+    try {
+      ok = await launchUrl(
+        waUri(c.phone, msg),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {
+      ok = false;
+    }
+
+    if (!ok && mounted) {
+      await Clipboard.setData(ClipboardData(text: msg));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'WhatsApp tidak bisa dibuka. Pesan disalin, tempel manual ya.',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _load() async {
@@ -113,8 +165,10 @@ class _HomeScreenState extends State<HomeScreen> {
         .where((s) => q.isEmpty || s.customer.name.toLowerCase().contains(q))
         .toList();
 
-    final totalPiutang =
+    final totalUtangPelanggan =
         _items.fold<int>(0, (sum, s) => sum + (s.balance > 0 ? s.balance : 0));
+    final totalPiutangWarung =
+        _items.fold<int>(0, (sum, s) => sum + (s.balance < 0 ? -s.balance : 0));
     final telat =
         _items.where((s) => s.status() == DebtStatus.telat).length;
     final mendekati =
@@ -155,7 +209,8 @@ class _HomeScreenState extends State<HomeScreen> {
           : Column(
               children: [
                 _SummaryCard(
-                  total: totalPiutang,
+                  total: totalUtangPelanggan,
+                  credit: totalPiutangWarung,
                   telat: telat,
                   mendekati: mendekati,
                 ),
@@ -190,6 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           itemBuilder: (_, i) => _CustomerTile(
                             summary: visible[i],
                             onTap: () => _openCustomer(visible[i].customer),
+                            onTagih: () => _tagihCepat(visible[i]),
                           ),
                         ),
                 ),
@@ -201,10 +257,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
 class _SummaryCard extends StatelessWidget {
   final int total;
+  final int credit;
   final int telat;
   final int mendekati;
   const _SummaryCard({
     required this.total,
+    required this.credit,
     required this.telat,
     required this.mendekati,
   });
@@ -218,7 +276,7 @@ class _SummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Total piutang',
+            Text('Total utang pelanggan',
                 style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
@@ -228,6 +286,16 @@ class _SummaryCard extends StatelessWidget {
                   .headlineMedium
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
+            if (credit > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Piutang warung: ${rupiah(credit)}',
+                style: const TextStyle(
+                  color: kBiru,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Row(
               children: [
@@ -278,7 +346,12 @@ class _Badge extends StatelessWidget {
 class _CustomerTile extends StatelessWidget {
   final CustomerSummary summary;
   final VoidCallback onTap;
-  const _CustomerTile({required this.summary, required this.onTap});
+  final VoidCallback onTagih;
+  const _CustomerTile({
+    required this.summary,
+    required this.onTap,
+    required this.onTagih,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -299,9 +372,23 @@ class _CustomerTile extends StatelessWidget {
             color: status == DebtStatus.lunas ? null : color,
             fontWeight: FontWeight.w500),
       ),
-      trailing: Text(
-        rupiah(summary.balance),
-        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (status == DebtStatus.mendekati ||
+              summary.balance > 0)
+            IconButton(
+              tooltip: 'Tagih lewat WhatsApp',
+              icon: const Icon(Icons.chat_outlined),
+              color: color,
+              onPressed: onTagih,
+            ),
+          Text(
+            rupiah(summary.balance.abs()),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ],
       ),
     );
   }

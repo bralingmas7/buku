@@ -10,6 +10,7 @@ import '../db.dart';
 import '../services/backup_crypto_service.dart';
 import '../services/backup_status.dart';
 import '../services/google_drive_service.dart';
+import '../services/shop_message_settings.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -20,6 +21,11 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _busy = false;
+  bool _savingShop = false;
+  final _shopNameController = TextEditingController();
+  final _shopHeaderController = TextEditingController();
+  final _shopFooterController = TextEditingController();
+
   String? _googleEmail;
   String _googleRestoreStatus = 'Belum diperiksa';
   StreamSubscription<GoogleSignInAccount?>? _googleAccountSubscription;
@@ -27,6 +33,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void initState() {
     super.initState();
+    _loadShopSettings();
 
     final google = GoogleDriveService.instance;
     _googleEmail = google.account?.email;
@@ -51,9 +58,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _restoreGoogleStatus();
   }
 
+  Future<void> _loadShopSettings() async {
+    try {
+      final settings = await ShopMessageSettings.load();
+      if (!mounted) return;
+      _shopNameController.text = settings.shopName;
+      _shopHeaderController.text = settings.header;
+      _shopFooterController.text = settings.footer;
+    } catch (e) {
+      debugPrint('Gagal memuat pengaturan warung: $e');
+    }
+  }
+
+  Future<void> _saveShopSettings() async {
+    if (_savingShop) return;
+    setState(() => _savingShop = true);
+    try {
+      await ShopMessageSettings(
+        shopName: _shopNameController.text,
+        header: _shopHeaderController.text,
+        footer: _shopFooterController.text,
+      ).save();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pengaturan warung berhasil disimpan.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menyimpan pengaturan: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _savingShop = false);
+    }
+  }
+
   @override
   void dispose() {
     _googleAccountSubscription?.cancel();
+    _shopNameController.dispose();
+    _shopHeaderController.dispose();
+    _shopFooterController.dispose();
     super.dispose();
   }
 
@@ -149,6 +195,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() => _busy = true);
 
     try {
+      final revision = BackupStatus.instance.revision;
       final data = await AppDb.instance.exportBackup();
       final json = const JsonEncoder.withIndent('  ').convert(data);
       final now = DateTime.now();
@@ -166,6 +213,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       );
 
       if (result != null) {
+        await BackupStatus.instance.markLocalBackedUp(revision);
         _message('File backup berhasil disimpan.');
       }
     } catch (e) {
@@ -491,6 +539,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(Icons.storefront_outlined),
+                    title: Text('Identitas warung'),
+                    subtitle: Text(
+                      'Nama dan format pesan untuk penagihan serta bukti pelunasan.',
+                    ),
+                  ),
+                  TextField(
+                    controller: _shopNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Nama warung',
+                      hintText: 'Contoh: Warung Berkah',
+                    ),
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _shopHeaderController,
+                    decoration: const InputDecoration(
+                      labelText: 'Header / pembuka pesan',
+                      hintText: 'Teks pembuka (opsional)',
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _shopFooterController,
+                    decoration: const InputDecoration(
+                      labelText: 'Footer / penutup pesan',
+                      hintText: 'Teks penutup (opsional)',
+                    ),
+                    minLines: 1,
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _savingShop ? null : _saveShopSettings,
+                      icon: const Icon(Icons.save_outlined),
+                      label: Text(
+                        _savingShop ? 'Menyimpan...' : 'Simpan pengaturan warung',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
             child: Column(
               children: [
                 const ListTile(
@@ -539,6 +645,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ],
             ),
           ),
+          const SizedBox(height: 12),
           const SizedBox(height: 12),
           Card(
             child: Padding(

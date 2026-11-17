@@ -31,6 +31,8 @@ String tgl(DateTime d) => '${d.day} ${_bulan[d.month - 1]} ${d.year}';
 String statusText(CustomerSummary s, [DateTime? now]) {
   final today = dateOnly(now ?? DateTime.now());
   switch (s.status(now)) {
+    case DebtStatus.piutang:
+      return 'Piutang pelanggan';
     case DebtStatus.lunas:
       return 'Lunas';
     case DebtStatus.telat:
@@ -78,20 +80,41 @@ String buildReminder({
   required int balance,
   DateTime? due,
   required List<Txn> txns,
+  String shopName = '',
+  String header = '',
+  String footer = '',
 }) {
-  final b = StringBuffer()
+  final b = StringBuffer();
+
+  if (header.trim().isNotEmpty) {
+    b.writeln(header.trim());
+    b.writeln('');
+  }
+  if (shopName.trim().isNotEmpty) {
+    b.writeln('*${shopName.trim()}*');
+  }
+
+  b
     ..writeln('Halo $name, mohon maaf mengganggu 🙏')
     ..writeln(
-        'Ini pengingat ramah dari warung: sisa utang Anda saat ini ${rupiah(balance)}.');
+      'Ini pengingat ramah dari warung: sisa utang Anda saat ini '
+      '*${rupiah(balance.abs())}*.',
+    );
+
   if (due != null) b.writeln('Jatuh tempo: ${tgl(due)}.');
+
   final recent = _newestFirst(txns);
   if (recent.isNotEmpty) {
-    b.writeln('\nRincian terakhir:');
+    b.writeln('\nRincian siklus tagihan aktif:');
     for (final t in recent) {
       b.writeln('- ${_line(t)}');
     }
   }
-  b.write('\nKalau sudah ada rezekinya, ditunggu ya. Terima kasih banyak!');
+
+  final closing = footer.trim();
+  b.write(
+    '\n${closing.isNotEmpty ? closing : 'Kalau sudah ada rezekinya, ditunggu ya. Terima kasih banyak!'}',
+  );
   return b.toString();
 }
 
@@ -99,6 +122,9 @@ String buildReminder({
 String buildSettlementReceipt({
   required String name,
   required List<Txn> txns,
+  String shopName = '',
+  String header = '',
+  String footer = '',
 }) {
   final sorted = [...txns]..sort((a, b) {
     final byDate = a.date.compareTo(b.date);
@@ -112,13 +138,23 @@ String buildSettlementReceipt({
       .where((t) => t.type == TxnType.bayar)
       .fold<int>(0, (sum, t) => sum + t.amount);
 
-  final b = StringBuffer()
+  final b = StringBuffer();
+
+  if (header.trim().isNotEmpty) {
+    b.writeln(header.trim());
+    b.writeln('');
+  }
+  if (shopName.trim().isNotEmpty) {
+    b.writeln('*${shopName.trim()}*');
+  }
+
+  b
     ..writeln('BUKTI PELUNASAN')
     ..writeln('Nama: $name')
     ..writeln('Waktu: ${tglJam(DateTime.now())}')
     ..writeln('Status: LUNAS')
-    ..writeln('Total utang: ${rupiah(totalDebt)}')
-    ..writeln('Total pembayaran: ${rupiah(totalPaid)}')
+    ..writeln('Total utang: *${rupiah(totalDebt)}*')
+    ..writeln('Total pembayaran: *${rupiah(totalPaid)}*')
     ..writeln('')
     ..writeln('Rincian transaksi:');
 
@@ -127,7 +163,11 @@ String buildSettlementReceipt({
   }
 
   b.writeln('');
-  b.write('Terima kasih sudah menyelesaikan pembayaran 🙏');
+  b.write(
+    footer.trim().isNotEmpty
+        ? footer.trim()
+        : 'Terima kasih sudah menyelesaikan pembayaran 🙏',
+  );
   return b.toString();
 }
 
